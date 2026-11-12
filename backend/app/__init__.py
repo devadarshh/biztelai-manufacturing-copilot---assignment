@@ -1,0 +1,1 @@
+"""BiztelAI manufacturing copilot backend."""

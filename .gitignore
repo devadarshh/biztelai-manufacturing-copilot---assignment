@@ -1,6 +1,12 @@
 .env
 .env.*
 !.env.example
+/.venv/
+/notebotlm/
+/__pycache__/
+**/__pycache__/
+*.py[cod]
+/.pytest_cache/
 /storage/supabase_cache/
 /storage/local_dev_qdrant/
 /storage/local_uploads/
