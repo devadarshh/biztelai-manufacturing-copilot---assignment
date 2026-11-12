@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+/storage/supabase_cache/
+/storage/local_dev_qdrant/
+/storage/local_uploads/
+/storage/uploads/
