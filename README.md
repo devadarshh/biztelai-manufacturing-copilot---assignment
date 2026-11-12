@@ -20,7 +20,7 @@ Manufacturing supervisors often need an answer while coordinating work on a phon
 - Upload PDFs from the UI; index synchronously for local development or through a Redis/RQ worker when shared Redis and Qdrant Cloud are configured.
 - Configure local persistent Qdrant or Qdrant Cloud.
 - Expose a health endpoint that reports whether backend services initialized successfully.
-- Generate a Markdown report from the ten assignment questions using actual responses from a running API.
+- Run the ten assignment questions and five additional questions against a running API; save the actual answers and citations.
 
 ## Technology and architecture
 
@@ -69,7 +69,7 @@ backend/
       rag_service.py          Retrieval, prompt construction, and citations
     worker.py                 RQ worker task and process entry point
   scripts/
-    run_assignment_eval.py    Run and save the ten real API responses
+    run_assignment_eval.py    Run and save assignment and supplemental API responses
   tests/
 frontend/
   src/App.tsx                 Chat and indexed-document UI
@@ -256,29 +256,40 @@ curl -X POST http://127.0.0.1:8001/api/ask \
 
 ## Assignment questions and actual results
 
-The four assigned manufacturing PDFs and `Sample_Questions.pdf` are present in `sample-docs/` and were locally extracted (8 pages total). They were not placed in the configured Supabase bucket or default local source, and no live model/API requests were made. Therefore no API-generated answers or citations can be reported yet. The table intentionally records **NOT RUN** rather than substituting expected answers or fabricated results.
+The four assigned manufacturing PDFs were indexed from `sample-docs/` through the local-folder source. `GET /api/documents` reported all four as ready, and `GET /api/storage` reported `source: local`. The sample-question PDF was excluded from the indexed corpus. Responses below came from the running app's `/api/ask` endpoint; the full generated answers and citations are in [`assignment_qa_results.md`](./assignment_qa_results.md).
 
-| # | Question | Actual result |
+| # | Assignment question | App response |
 |---:|---|---|
-| 1 | Recommended coolant concentration for the TX-200 CNC turning centre? | NOT RUN — live API evaluation not performed |
-| 2 | Meaning and operator response for alarm AL-104? | NOT RUN — live API evaluation not performed |
-| 3 | Who may remove a machine lockout lock? | NOT RUN — live API evaluation not performed |
-| 4 | Outer diameter tolerance for the BH-220 bearing housing? | NOT RUN — live API evaluation not performed |
-| 5 | Spindle runout check frequency and responsible role? | NOT RUN — live API evaluation not performed |
-| 6 | What happens if the supplier's Material Test Certificate is missing? | NOT RUN — live API evaluation not performed |
-| 7 | How many samples should be inspected for a lot of 1,000 pieces? | NOT RUN — live API evaluation not performed |
-| 8 | What is the normal hydraulic system pressure? | NOT RUN — live API evaluation not performed |
-| 9 | What is the procedure for removing a lock when its owner is absent? | NOT RUN — live API evaluation not performed |
-| 10 | What is the factory manager's salary? | NOT RUN — live API evaluation not performed |
+| 1 | Recommended coolant concentration for the TX-200 CNC turning centre? | 6–8% (maintenance manual, p. 1) |
+| 2 | Meaning and operator response for alarm AL-104? | Way-lube oil level low; top up with ISO VG 68 oil to MAX, then press RESET (maintenance manual, p. 2) |
+| 3 | Who may remove a machine lockout lock? | Each authorized person removes only their own lock; the documented absent-owner procedure is an exception requiring contact attempts and two authorizations (safety SOP, p. 1) |
+| 4 | Outer diameter tolerance for the BH-220 bearing housing? | ±0.050 mm (QC SOP Rev04, p. 2) |
+| 5 | Spindle runout check frequency and responsible role? | Monthly, by a maintenance technician (maintenance manual, p. 1) |
+| 6 | What happens if the supplier's Material Test Certificate is missing? | Put the lot on HOLD; do not inspect or accept it until the certificate arrives (QC SOP Rev04, p. 2) |
+| 7 | How many samples should be inspected for a lot of 1,000 pieces? | 32 samples (QC SOP Rev04, p. 1) |
+| 8 | What is the normal hydraulic system pressure? | 3.5–4.0 MPa (35–40 bar) (maintenance manual, p. 1) |
+| 9 | What is the procedure for removing a lock when its owner is absent? | Contact the owner; if unreachable, obtain Production Manager and Safety Officer authorization, inspect the machine, record on SF-12, and inform the owner before their next shift (safety SOP, pp. 1–2) |
+| 10 | What is the factory manager's salary? | The app abstained: it could not find this information in the provided documents. |
 
-After adding the PDFs and starting the services, run:
+### Five additional questions and app responses
+
+These are separate questions written for this evaluation. The full answer text and citations are in [`assignment_extra_qa_results.md`](./assignment_extra_qa_results.md).
+
+| # | Question | App response |
+|---:|---|---|
+| 1 | What should the operator do when alarm AL-305 indicates spindle overload? | Stop the cycle, check tool wear and cutting parameters, and inform the shift supervisor (maintenance manual, p. 2). |
+| 2 | What torque and tightening pattern should be used when re-mounting the chuck? | Tighten the mounting bolts in a criss-cross sequence to 110 Nm with a calibrated torque wrench (maintenance manual, p. 1). |
+| 3 | What is the normal chuck clamping pressure, and which gauge should be used to check it? | 2.0–2.5 MPa, checked with a chuck pressure gauge (maintenance manual, p. 1). |
+| 4 | What is the required coolant mix when responding to alarm AL-412? | Top up coolant mixed to 6–8% concentration (maintenance manual, p. 2). |
+| 5 | What is the daily production target for the shaft machining line? | The app abstained: it could not find this information in the provided documents. |
+
+The evaluator sends the questions to the live `/api/ask` endpoint. Run all 15, or use `--start-index 10` to run only the five additional questions and save them separately:
 
 ```bash
 cd backend
 ../.venv/bin/python scripts/run_assignment_eval.py
+../.venv/bin/python scripts/run_assignment_eval.py --start-index 10 --output ../assignment_extra_qa_results.md
 ```
-
-The script sends all ten questions to the live `/api/ask` endpoint and creates `assignment_qa_results.md` with the actual returned answers and citations. Review that file before including its answers in a submission. It does not contain expected answers or fixture responses.
 
 ## Tests and checks
 
@@ -292,12 +303,13 @@ The backend tests include generated-PDF text extraction, local PDF upload/indexi
 
 ## Known limitations and operational cautions
 
-- Ten assignment questions have not been evaluated through the live API. The provided PDFs are in `sample-docs/`, not the configured Supabase bucket or default local document folder.
+- The live evaluation confirmed the listed responses for the indexed sample corpus, but answer quality remains model- and retrieval-dependent. A differently worded spindle-runout question once returned the wrong responsible role; use the cited SOP, not a paraphrase alone, for safety or maintenance decisions.
+- During repeated model evaluation, some requests returned HTTP 503; rerun failed items after checking provider availability.
 - The default local embedding model must be downloaded from Hugging Face the first time it is used. Hosted `HF_EMBEDDING_PROVIDER=api` requires valid credentials and may require paid inference credits.
 - Supabase behavior was tested with a mocked SDK; no live bucket sync was performed.
 - Physical phone/tablet access over Wi-Fi is not available in this environment and requires manual verification.
 - Revision parsing/classification is heuristic and cannot establish document-control approval authority. Review ambiguous dates/revisions and do not treat `revision_unknown` as current.
 - Similarity thresholds require calibration against the real documents. A threshold can reject valid answers or admit weak matches.
-- There is no OCR for scanned PDFs, authentication/authorization, per-user document isolation, user-specific audit trail, or persistent conversation history.
+- There is no OCR for scanned PDFs, authentication/authorization, per-user document isolation, or user-specific audit trail. Conversation history is stored in this browser's local storage; it is not synchronized across devices or accounts.
 - LLM and embedding providers require external service availability and valid rotated credentials; API connectivity alone does not establish answer correctness.
 - Do not expose this development server to the public internet. Restrict LAN access to a trusted network and add authentication before production deployment.

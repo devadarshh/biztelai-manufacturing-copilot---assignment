@@ -19,6 +19,11 @@ QUESTIONS = [
     "What is the normal hydraulic system pressure?",
     "What is the procedure for removing a lock when its owner is absent?",
     "What is the factory manager's salary?",
+    "What should the operator do when alarm AL-305 indicates spindle overload?",
+    "What torque and tightening pattern should be used when re-mounting the chuck?",
+    "What is the normal chuck clamping pressure, and which gauge should be used to check it?",
+    "What is the required coolant mix when responding to alarm AL-412?",
+    "What is the daily production target for the shaft machining line?",
 ]
 
 
@@ -33,16 +38,17 @@ def ask(api_base: str, question: str) -> dict:
         return json.load(response)
 
 
-def render_report(results: list[dict]) -> str:
+def render_report(results: list[dict], start_index: int = 0) -> str:
     lines = [
         "# Assignment question results",
         "",
         f"Generated: {datetime.now(timezone.utc).isoformat()}",
         "",
         "These are responses returned by the running application; expected answers are not inserted by this script.",
+        "Questions 1-10 are from the assignment. Questions 11-15 are additional questions written for this evaluation.",
         "",
     ]
-    for index, result in enumerate(results, start=1):
+    for index, result in enumerate(results, start=start_index + 1):
         lines.extend(
             [
                 f"## {index}. {result['question']}",
@@ -70,11 +76,11 @@ def render_report(results: list[dict]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the ten assignment questions against a running local API.")
+    parser = argparse.ArgumentParser(description="Run assignment questions against a running local API.")
     parser.add_argument(
         "--api-base",
-        default=os.environ.get("ASSIGNMENT_API_BASE_URL", "http://127.0.0.1:8000/api"),
-        help="API base URL, ending in /api (default: http://127.0.0.1:8000/api)",
+        default=os.environ.get("ASSIGNMENT_API_BASE_URL", "http://127.0.0.1:8001/api"),
+        help="API base URL, ending in /api (default: http://127.0.0.1:8001/api)",
     )
     parser.add_argument(
         "--output",
@@ -82,10 +88,19 @@ def main() -> None:
         default=Path(__file__).resolve().parents[2] / "assignment_qa_results.md",
         help="Markdown report path",
     )
+    parser.add_argument(
+        "--start-index",
+        type=int,
+        default=0,
+        help="Zero-based question index to start from (use 10 for the five additional questions)",
+    )
     args = parser.parse_args()
 
+    if not 0 <= args.start_index < len(QUESTIONS):
+        parser.error(f"--start-index must be between 0 and {len(QUESTIONS) - 1}")
+
     results = []
-    for question in QUESTIONS:
+    for question in QUESTIONS[args.start_index :]:
         try:
             response = ask(args.api_base, question)
             results.append(
@@ -96,7 +111,16 @@ def main() -> None:
                     "sources": response.get("sources", []),
                 }
             )
-        except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+        except HTTPError as exc:
+            results.append(
+                {
+                    "question": question,
+                    "status": "request failed",
+                    "error": f"HTTPError {exc.code}: request failed; check the API and backend logs.",
+                    "sources": [],
+                }
+            )
+        except (URLError, TimeoutError, ValueError) as exc:
             results.append(
                 {
                     "question": question,
@@ -107,7 +131,7 @@ def main() -> None:
             )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(render_report(results), encoding="utf-8")
+    args.output.write_text(render_report(results, args.start_index), encoding="utf-8")
     print(f"Wrote {len(results)} actual API results to {args.output}")
 
 

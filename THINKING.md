@@ -1,18 +1,28 @@
 # Reflection
 
-## 1. Understand the user.
+## 1. Understand the user
 
-The intended users are manufacturing supervisors and authorized shop-floor staff who need to locate approved operating, quality, maintenance, and safety information quickly. A reasonable design assumption is that they may be using a phone or tablet, working under time pressure, and need concise answers with a source they can verify. These are product assumptions, not findings from user interviews.
+The primary user is a shift supervisor coordinating operators, production targets, quality checks, and maintenance or safety escalations. They may need to resolve a machine alarm or confirm a procedure while standing on a noisy shop floor with a phone or tablet and limited time to search long PDFs. A wrong or outdated answer is more frustrating—and riskier—than being told that the system cannot answer. These are reasonable product assumptions; I did not interview a manufacturing supervisor.
 
-## 2. User journey.
+## 2. User journey
 
-An operator or supervisor opens the responsive copilot, asks a procedure question in plain language, and receives a concise response backed by retrieved PDF excerpts. The response exposes document, page, section when present, and revision status. A supervisor can inspect the evidence, check whether a revision is current or superseded, and use the indexed-document panel to confirm extraction status. After adding or replacing approved PDFs, an authorized user re-indexes the library.
+**Draft for me to review and rewrite in my own voice:** the assignment asks for this first draft to be written by the applicant before AI critique. No applicant-authored draft was available for this pass, so this is an AI-assisted starting point rather than a claim that I completed that step as requested.
 
-## 3. AI challenge.
+1. At shift handover, a supervisor opens the copilot on a phone and asks a direct question, such as what to do for an alarm or which inspection sample size to use.
+2. The copilot searches the approved manuals and SOPs, then gives a short answer with the document, page, and revision status visible.
+3. Before acting—especially on a safety or quality issue—the supervisor opens the source evidence and checks that it supports the answer and is the current procedure.
+4. If the documents do not answer, the system should say so and direct the supervisor to the appropriate authorized person rather than guess.
+5. If the app is unavailable, the PDF is unreadable, revisions conflict, or the Wi-Fi/model service fails, the supervisor uses the controlled source or existing escalation process instead of treating a missing response as approval.
 
-**No actual critique conversation with an AI reviewer or end user was provided in the material available for this implementation. Complete this section with the real critique and response before submission; do not present a hypothetical exchange as one that occurred.**
+## 3. AI challenge
 
-The engineering challenge observed during code inspection was safely distinguishing current instructions from superseded or future-effective ones while not pretending that ambiguous metadata is authoritative. The implementation uses explicit revision/date evidence, conservative unknown states, current-revision retrieval priority, and citation validation. This is a technical design response and is not a recorded critique conversation.
+I asked an AI assistant to challenge the journey from two skeptical perspectives: “Review this shop-floor copilot journey as a skeptical supervisor and product manager. Identify unsafe assumptions, likely failure cases, and one concrete change that would make the flow trustworthy.”
+
+**Supervisor perspective:** “A citation is not enough if I cannot tell whether it is the current procedure or quickly check the exact step. If the answer is uncertain, I need a clear stop-and-escalate path—not a confident-sounding guess.”
+
+**Product manager perspective:** “The journey assumes connectivity and a working model at the moment of need. What happens when Wi-Fi drops, a PDF is not indexed, or two revisions disagree? The fallback must be explicit, and the product must not turn a service error into an operational instruction.”
+
+I agreed that a source name alone does not establish trust and that failures need a deliberate fallback. I would not treat an AI answer as authorization for safety-critical work; the controlled SOP and designated safety/maintenance roles remain authoritative. I made the source page and revision status part of the evidence flow, kept unsupported questions as abstentions, and documented that users must fall back to their approved procedure and escalation path when the app fails. This was an AI-generated critique, not a user interview.
 
 ## 4. The improvement you added, and why you chose it.
 
@@ -20,12 +30,14 @@ Revision awareness was prioritized because using an old quality or safety proced
 
 The improvement also validates that a model-generated source citation points to a document/page actually retrieved. If it does not, the service returns the standard not-found response instead of presenting the unsupported answer as grounded.
 
-## 5. Final reflection.
+## 5. Final reflection
 
-The project remains the original React/Vite + FastAPI application. The backend performs PDF page extraction, recursive chunking, local Sentence Transformers embeddings by default (hosted Hugging Face inference is optional), Qdrant vector persistence/retrieval, and Gemini answer generation. Supabase Storage is the primary PDF source when configured, with a private local cache and a local-folder fallback. Qdrant can run locally or as a cloud service. The browser uses a same-origin API path by default, with configurable Vite proxy and direct API base options for LAN deployments.
+The project remains the React/Vite + FastAPI application. It extracts PDF pages, chunks text, uses local Sentence Transformers embeddings by default, retrieves from Qdrant, and generates answers with Gemini. Supabase Storage is optional for PDFs; this evaluation used the local `sample-docs/` source. Chat history stays in browser local storage and is not synchronized to a database or across devices.
 
-Important decisions include keeping the existing architecture, declaring the missing PyMuPDF runtime dependency, correcting zero-based PDF page metadata to human page numbers, making document-processing errors visible, replacing stale vectors when a file changes, bounding question input, setting a model request timeout, and rejecting unverified citations. An empty or unextractable directory no longer erases a previously populated index during re-index.
+The improvement I prioritized was revision-aware retrieval and evidence display: Rev04 of the incoming inspection SOP is current while Rev03 is marked superseded. The intent is to reduce the chance of relying on an old instruction, while still showing source evidence so a supervisor can verify the result. Other implementation decisions include correcting PDF page numbering, showing document-processing errors, replacing stale vectors when files change, bounding question length, and rejecting unverified citations.
 
-The four assigned manufacturing PDFs and a sample-question PDF were found in `sample-docs/`; local extraction produced eight pages. They were not ingested into the configured runtime, and no live Supabase, model, embedding, or Qdrant request was made. Unit tests use generated PDFs and mocked model/vector/storage services where appropriate; these validate code paths but do not establish answer correctness against the assignment corpus. The development app has not been tested from a separate phone/tablet. Before submission, add the approved PDFs to the configured source, confirm that model and Qdrant services are ready, re-index, run the ten-question API evaluator, review every citation and revision classification, and test the LAN flow on a real device.
+The biggest challenge was verifying end-to-end behavior without overstating what a successful API response proves. The local service reported all four manufacturing PDFs ready, and the app answered the ten assignment questions, abstaining on the salary question. I also ran five additional questions; the daily production target question was correctly reported as missing. Repeated calls sometimes returned HTTP 503, so failures must be retried rather than presented as answers. One paraphrase of the spindle-runout question incorrectly named the operator instead of the maintenance technician; the assignment wording returned the correct role. That discrepancy shows that retrieved citations and model phrasing still need human verification.
 
-Future improvements include OCR for scanned documents, authoritative document identifiers and revision manifests instead of filename heuristics, calibrated retrieval thresholds, administrator-reviewed supersession metadata, authenticated upload/ingestion, persistent conversation history, and end-to-end evaluation fixtures derived from approved source pages.
+Backend tests passed (36 tests). Frontend lint and build completed; lint reported an existing React effect warning and the build reported a large-chunk warning. The frontend and API responded locally, but a second phone/tablet was not available, so LAN use from another device has not been verified. A duplicate dev-server attempt also found port 5174 already occupied; I used the already-running local app instead. I have not made a screen recording or uploaded one.
+
+Next I would test on the actual shop-floor devices and network, add OCR and document-control metadata from an authoritative source, tune retrieval using reviewed question/answer evidence, and add authentication and an audit trail. I would ask customers which manuals are authoritative, how revision approval is represented, who may upload or re-index documents, what the required offline fallback is, and what confidence/evidence they need before acting. Conversation history remains local to the browser profile; it does not follow a supervisor between devices.
